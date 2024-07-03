@@ -33,19 +33,23 @@ class MessagesHandler < ApplicationHandler
       case params[:current_step]
       when 0
         from_short_name = device.nodes[message.from.to_i]&.user&.short_name
-
-        device.send_message(<<~TEXT.strip, destination: current_user.nodenum)
+        header = <<~TEXT.strip
           From: #{from_short_name || message.from}
           Subject: #{message.subject}
-          Sent: #{message.created_at.in_time_zone("Adelaide").strftime("%Y-%m-%d %H:%M")}
+          Posted: #{message.created_at.in_time_zone("Adelaide").strftime("%Y-%m-%d %H:%M")}
         TEXT
-        device.send_message(message.body, destination: current_user.nodenum)
+        bytesize = (message.body.bytesize + header.bytesize)
+
+        if bytesize <= 228
+          device.send_message("#{header}\n\n#{message.body}", destination: current_user.nodenum)
+        else
+          device.send_message(header, destination: current_user.nodenum)
+          device.send_message(message.body, destination: current_user.nodenum)
+        end
 
         message.update!(read: true)
 
         if messages.many?
-          sleep 0.1
-
           device.send_message("Read next message? Y/N:", destination: current_user.nodenum)
           params[:current_step] += 1
 
@@ -56,6 +60,8 @@ class MessagesHandler < ApplicationHandler
           handle_read
           return
         end
+      else
+        device.send_message("No more messages", destination: current_user.nodenum)
       end
     else
       device.send_message("No new mail", destination: current_user.nodenum)
@@ -63,8 +69,6 @@ class MessagesHandler < ApplicationHandler
 
     params[:current_step] = 0
     params[:action] = nil
-
-    sleep 0.1
 
     handle_menu
   end
@@ -83,8 +87,6 @@ class MessagesHandler < ApplicationHandler
 
         params[:current_step] = 0
         params[:action] = nil
-
-        sleep 0.1
 
         handle_menu
 
@@ -116,8 +118,6 @@ class MessagesHandler < ApplicationHandler
 
       params[:current_step] = 0
       params[:action] = nil
-
-      sleep 0.1
 
       handle_menu
     end

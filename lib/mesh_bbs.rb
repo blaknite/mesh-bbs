@@ -6,9 +6,11 @@ require "active_record"
 require_relative "../app/handlers/application_handler"
 require_relative "../app/handlers/directory_handler"
 require_relative "../app/handlers/messages_handler"
+require_relative "../app/handlers/bulletins_handler"
 
 require_relative "../app/models/application_model"
 require_relative "../app/models/message"
+require_relative "../app/models/bulletin"
 
 class MeshBBS
   State = Struct.new(:handler, :action, :params)
@@ -18,7 +20,7 @@ class MeshBBS
     end
   end
 
-  VALID_MODULES = %w(M D)
+  VALID_MODULES = %w(M B D)
 
   def self.start!(port:)
     new(port:).start!
@@ -31,7 +33,6 @@ class MeshBBS
   def initialize(port:)
     @port = port
     @params = {}
-    @connection = nil
     @device = nil
   end
 
@@ -69,7 +70,11 @@ class MeshBBS
     )
     params = @params[current_user[:nodenum]] ||= {}
 
-    motd = "Welcome to the Meshtastic BBS."
+    if params[:last_request_at] && params[:last_request_at] < Time.now - 300
+      params.clear
+    end
+
+    params[:last_request_at] = Time.now
 
     command = packet.decoded.payload.strip[0].upcase
     if params[:handler].nil? && VALID_MODULES.include?(command)
@@ -94,6 +99,13 @@ class MeshBBS
         params: params,
         packet: packet
       ).handle_packet
+    when "B"
+      BulletinsHandler.new(
+        device: @device,
+        current_user: current_user,
+        params: params,
+        packet: packet
+      ).handle_packet
     when "D"
       DirectoryHandler.new(
         device: @device,
@@ -107,12 +119,11 @@ class MeshBBS
       @device.send_message(<<~TEXT.strip, destination: current_user.nodenum)
         Hi #{current_user}!
 
-        #{motd}
-
         You have #{messages.count} unread message#{"s" unless messages.one?}
 
         Please select an option:
         - [M]ail
+        - [B]ulletin Board
         - [D]irectory
         - [H]elp
       TEXT
