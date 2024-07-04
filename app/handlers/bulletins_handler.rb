@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class BulletinsHandler < ApplicationHandler
+  VALID_ACTIONS = %w(R P)
+
   def handle_packet
     case params[:action]
     when "R"
@@ -87,6 +89,7 @@ class BulletinsHandler < ApplicationHandler
 
       device.send_message("Bulletin saved", destination: current_user.nodenum)
 
+      params[:subject] = nil
       params[:current_step] = 0
       params[:action] = nil
 

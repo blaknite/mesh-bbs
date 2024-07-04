@@ -20,7 +20,7 @@ class MeshBBS
     end
   end
 
-  VALID_MODULES = %w(M B D)
+  VALID_HANDLERS = %w(M B D)
 
   def self.start!(port:)
     new(port:).start!
@@ -76,57 +76,59 @@ class MeshBBS
 
     params[:last_request_at] = Time.now
 
-    command = packet.decoded.payload.strip[0].upcase
-    if params[:handler].nil? && VALID_MODULES.include?(command)
-      params[:handler] = command
-      params[:action] = nil
-      params[:current_step] = 0
-    elsif params[:handler] && params[:action].nil?
-      params[:action] = command
-    end
+    command = packet.decoded.payload.strip.upcase
 
-    puts "user: #{current_user}, command: #{command}, handler: #{params[:handler]}, action: #{params[:action]}"
+    if params[:handler].nil? && VALID_HANDLERS.include?(command)
+      params[:handler] = command
+    end
 
     if command == "E"
       params.clear
     end
 
-    case params[:handler]
-    when "M"
-      MessagesHandler.new(
-        device: @device,
-        current_user: current_user,
-        params: params,
-        packet: packet
-      ).handle_packet
-    when "B"
-      BulletinsHandler.new(
-        device: @device,
-        current_user: current_user,
-        params: params,
-        packet: packet
-      ).handle_packet
-    when "D"
-      DirectoryHandler.new(
-        device: @device,
-        current_user: current_user,
-        params: params,
-        packet: packet
-      ).handle_packet
-    else
+    handler = current_handler(params[:handler])
+
+    unless handler
       messages = Message.where(to: current_user.nodenum, read: false)
 
       @device.send_message(<<~TEXT.strip, destination: current_user.nodenum)
-        Hi #{current_user}!
+      Hi #{current_user}!
 
-        You have #{messages.count} unread message#{"s" unless messages.one?}
+      You have #{messages.count} unread message#{"s" unless messages.one?}
 
-        Please select an option:
-        - [M]ail
-        - [B]ulletin Board
-        - [D]irectory
-        - [H]elp
+      Please select an option:
+      - [M]ail
+      - [B]ulletin Board
+      - [D]irectory
+      - [H]elp
       TEXT
+
+      return
+    end
+
+    if params[:action].nil? && handler::VALID_ACTIONS.include?(command)
+      params[:action] = command
+      params[:current_step] = 0
+    end
+
+    puts "user: #{current_user}, command: #{command}, handler: #{params[:handler]}, action: #{params[:action]}"
+
+    handler.new(
+      device: @device,
+      current_user: current_user,
+      params: params,
+      packet: packet
+    ).handle_packet
+  end
+
+  def current_handler(handler)
+    case handler
+    when "M"
+      MessagesHandler
+    when "B"
+      BulletinsHandler
+    when "D"
+      DirectoryHandler
     end
   end
 end

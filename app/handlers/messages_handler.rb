@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class MessagesHandler < ApplicationHandler
+  VALID_ACTIONS = %w(R S)
+
   def handle_packet
     case params[:action]
     when "R"
@@ -116,6 +118,8 @@ class MessagesHandler < ApplicationHandler
         destination: params[:to_node].num
       )
 
+      params[:to_node] = nil
+      params[:subject] = nil
       params[:current_step] = 0
       params[:action] = nil
 
